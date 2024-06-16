@@ -25,7 +25,7 @@ import bitsandbytes as bnb
 from huggingface_hub import login
 
 from transformers.trainer_utils import get_last_checkpoint
-
+from sagemaker.s3 import S3Downloader
 
 # COPIED FROM https://github.com/artidoro/qlora/blob/main/qlora.py
 def find_all_linear_names(model):
@@ -96,8 +96,10 @@ def training_function(script_args, training_args):
         bnb_4bit_compute_dtype=torch.bfloat16,
     )
 
+    model_source = script_args.model_data if script_args.model_data else script_args.model_id
+    print(f"Load the model {model_source}")
     model = AutoModelForCausalLM.from_pretrained(
-        script_args.model_id,
+        model_source,
         use_cache=False if training_args.gradient_checkpointing else True,  # this is needed for gradient checkpointing
         #device_map="auto",
         use_flash_attention_2=script_args.use_flash_attn,
@@ -173,6 +175,12 @@ class ScriptArguments:
         metadata={"help": "Wether to merge weights for LoRA."},
         default=False,
     )
+    model_data: str = field(
+        metadata={
+            "help": "The S3 path contains the model stored as model.tar.gz file"
+        },
+        default=None,
+    )
 
 
 def main():
@@ -187,6 +195,23 @@ def main():
     if token:
         print(f"Logging into the Hugging Face Hub with token {token[:10]}...")
         login(token=token)
+
+    print("Script args:")
+    print(script_args.model_data)
+    print(script_args)
+    if type(script_args.model_data) is str and len(script_args.model_data) > 3:
+        print(f"Download model file from {script_args.model_data}")
+        os.system("mkdir models")
+        S3Downloader.download(s3_uri=script_args.model_data, local_path="models/")
+        parent_dir = os.getcwd()
+        # change to model dir
+        os.chdir("models")
+        # use pigz for faster and parallel compression
+        print("Decompress the model")
+        os.system("tar -I pigz -xvf model.tar.gz")
+        # change back to parent dir
+        os.chdir(parent_dir)
+        script_args.model_data = "models/"
 
     # run training function
     training_function(script_args, training_args)

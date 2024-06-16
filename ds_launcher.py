@@ -26,11 +26,16 @@ def parse_args():
         type=str,
         help="Path to the training program/script to be run in parallel, can be either absolute or relative",
     )
+    parser.add_argument(
+        "--model_data",
+        type=str,
+        help="An optional param whose value is the S3 URI that store the model.tar.gz file",
+    )
 
     # rest from the training program
     parsed, nargs = parser.parse_known_args()
 
-    return parsed.training_script, nargs
+    return parsed, nargs
 
 
 def gen_hostfile(node_count, gpu_count):
@@ -107,11 +112,19 @@ def main():
     os.system('chmod o+t /tmp')
     # On main node, Deepspeed use pdsh to send works to remote nodes
     os.system('/usr/bin/apt-get update')
-    os.system('/usr/bin/apt-get install -y pdsh libaio1 libaio-dev')
+    os.system('/usr/bin/apt-get install -y pdsh libaio1 libaio-dev pigz')
 
+    os.system('cp -r aws_config ~/.aws')
+    
     if rank == 0:
-        train_script, args = parse_args()
-        command = f"deepspeed --hostfile=./deepspeed_hostfile {train_script} {' '.join(args)}"
+        args1, args2 = parse_args()
+        training_script = args1.training_script
+        model_data_param = args1.model_data
+        if type(model_data_param) is str and len(model_data_param) > 3:
+            model_data_param = "--model_data=" + model_data_param
+        else:
+            model_data_param = ""
+        command = f"deepspeed --hostfile=./deepspeed_hostfile {training_script} {model_data_param} {' '.join(args2)}"
         print(f'{current_host} is waiting for all worker nodes to become ready')
         while (not check_all_workers_ready(hosts[1:])) and (len(hosts) > 1):
             time.sleep(10)
@@ -131,7 +144,7 @@ def main():
         print(f'Node {current_host} is waiting for node 0 to distribute work')
         os.system('touch /tmp/jj_ready')
         while (os.system('cat /tmp/jj_done') != 0):
-            print(f'Node {current_host} is working, check done again in 30s')
+            print(f'Node {current_host} is working, check done flag again in 30s')
             time.sleep(30)
 
 
