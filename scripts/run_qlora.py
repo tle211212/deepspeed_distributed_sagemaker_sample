@@ -2,10 +2,10 @@ from dataclasses import dataclass, field
 import os
 
 # upgrade flash attention here
-try:
-    os.system("pip install flash-attn==2.5.9.post1 --no-build-isolation --upgrade")
-except:
-    print("flash-attn failed to install")
+#try:
+    #os.system("pip install flash-attn==2.5.9.post1 --no-build-isolation --upgrade")
+#except:
+#    print("flash-attn failed to install")
 
 from typing import Optional
 from transformers import (
@@ -196,9 +196,6 @@ def main():
         print(f"Logging into the Hugging Face Hub with token {token[:10]}...")
         login(token=token)
 
-    print("Script args:")
-    print(script_args.model_data)
-    print(script_args)
     if type(script_args.model_data) is str and len(script_args.model_data) > 3:
         print(f"Download model file from {script_args.model_data}")
         os.system("mkdir models")
@@ -208,7 +205,7 @@ def main():
         os.chdir("models")
         # use pigz for faster and parallel compression
         print("Decompress the model")
-        os.system("tar -I pigz -xvf model.tar.gz")
+        os.system("tar -xvf model.tar.gz")
         # change back to parent dir
         os.chdir(parent_dir)
         script_args.model_data = "models/"

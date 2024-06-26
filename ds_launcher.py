@@ -7,7 +7,6 @@ import shutil
 import stat
 import time
 
-logger = logging.getLogger(__name__)
 
 # upgrade flash attention here
 #try:
@@ -30,6 +29,11 @@ def parse_args():
         "--model_data",
         type=str,
         help="An optional param whose value is the S3 URI that store the model.tar.gz file",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="Path of the output"
     )
 
     # rest from the training program
@@ -111,20 +115,22 @@ def main():
     os.system('chmod a+rwx /tmp')
     os.system('chmod o+t /tmp')
     # On main node, Deepspeed use pdsh to send works to remote nodes
-    os.system('/usr/bin/apt-get update')
-    os.system('/usr/bin/apt-get install -y pdsh libaio1 libaio-dev pigz')
+    #os.system('/usr/bin/apt-get update')
+    #os.system('/usr/bin/apt-get install -y pdsh libaio1 libaio-dev')
 
     os.system('cp -r aws_config ~/.aws')
-    
+
     if rank == 0:
         args1, args2 = parse_args()
         training_script = args1.training_script
         model_data_param = args1.model_data
+        output_dir = args1.output_dir
+        os.system(f'mkdir {output_dir}')
         if type(model_data_param) is str and len(model_data_param) > 3:
             model_data_param = "--model_data=" + model_data_param
         else:
             model_data_param = ""
-        command = f"deepspeed --hostfile=./deepspeed_hostfile {training_script} {model_data_param} {' '.join(args2)}"
+        command = f"deepspeed --hostfile=./deepspeed_hostfile {training_script} {model_data_param} --output_dir {output_dir} {' '.join(args2)}"
         print(f'{current_host} is waiting for all worker nodes to become ready')
         while (not check_all_workers_ready(hosts[1:])) and (len(hosts) > 1):
             time.sleep(10)
